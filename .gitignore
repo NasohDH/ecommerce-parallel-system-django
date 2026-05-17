@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Database files
+*.sqlite3
+*.sqlite3-journal
+
+# Nginx logs & runtime files
+nginx/nginx-1.26.0/logs/*
+!nginx/nginx-1.26.0/logs/.gitkeep
+*.log
+nginx/nginx-1.26.0/temp/
+nginx/nginx-1.26.0/logs/nginx.pid
+
+# Stress testing results & PDFs
+results.csv
+*.pdf
+jmeter_report/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.sln
+*.sw?
