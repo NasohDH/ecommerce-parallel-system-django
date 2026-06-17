@@ -41,13 +41,52 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     def checkout(self, request):
         serializer = CheckoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # order = services.checkout_queue.checkout(serializer.validated_data["user_id"])
         from store.services.order.order_checkout import checkout_cart
         order = checkout_cart(serializer.validated_data["user_id"])
         return Response(
             self.get_serializer(order).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=["post"], url_path="trigger-batch")
+    def trigger_batch(self, request):
+        custom_date = request.data.get("date") or request.query_params.get("date")
+        
+        from store.services.sales.batch_processing import trigger_daily_sales_batch
+        from store.models.sales_report import DailySalesReport
+        import time
+        
+        start_time = time.perf_counter()
+        
+        # Trigger daily sales batch synchronously to utilize dynamic in-process code and bypass Celery caching
+        report_id = trigger_daily_sales_batch(custom_date=custom_date)
+        
+        if report_id is None:
+            return Response({
+                "message": "Daily sales batch job is already running or was skipped."
+            }, status=status.HTTP_409_CONFLICT)
+        
+        # Keep HTTP request open: Poll the database until completion
+        while True:
+            report = DailySalesReport.objects.get(pk=report_id)
+            if report.status == "completed":
+                break
+            elif report.status == "failed":
+                return Response({
+                    "error": "Daily sales batch job failed!",
+                    "report_id": report_id
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            time.sleep(0.2)
+            
+        elapsed = time.perf_counter() - start_time
+        return Response({
+            "message": "Daily sales batch job completed successfully!",
+            "report_id": report_id,
+            "target_date": custom_date or "yesterday (default)",
+            "request_elapsed_seconds": round(elapsed, 3),
+            "total_execution_time_seconds": report.total_execution_time,
+            "pdf_generation_time_seconds": report.pdf_generation_time
+        }, status=status.HTTP_200_OK)
 
 
 class UserOrdersView(APIView):

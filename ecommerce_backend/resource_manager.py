@@ -16,7 +16,7 @@ from ecommerce_backend.metrics import (
 
 MAX_WORKERS = getattr(settings, "SYSTEM_MAX_WORKERS", 20)
 MAX_QUEUE_SIZE = getattr(settings, "SYSTEM_MAX_QUEUE_SIZE", 100)
-IDLE_TIMEOUT = 1.0  # Seconds before an idle thread "dies"
+IDLE_TIMEOUT = 10
 
 class ResourceManager:
     """Simulates a Cached Thread Pool with a hard limit."""

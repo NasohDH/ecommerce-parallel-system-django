@@ -13,7 +13,7 @@ def make_request(i):
         pass
 
 print("==========================================")
-print(" 🚀 INITIATING 100x TRAFFIC SURGE SIMULATION")
+print("  INITIATING 100x TRAFFIC SURGE SIMULATION")
 print("==========================================")
 print(f"Target: http://127.0.0.1:8080/")
 print(f"Total Requests: {NUM_REQUESTS}")
@@ -35,4 +35,4 @@ for i in range(NUM_REQUESTS):
 for t in threads:
     t.join()
 
-print("\n✅ Surge complete. Check the Load Balancer console to see Auto-Scaling in action!")
+print("\n Surge complete. Check the Load Balancer console to see Auto-Scaling in action!")

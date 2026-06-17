@@ -14,6 +14,7 @@ class Order(models.Model):
     )
     total_price = models.FloatField()
     status = models.CharField(max_length=50, default="pending")
+    error_message = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True, auto_now_add=True)
 
     class Meta:

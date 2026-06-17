@@ -5,6 +5,7 @@ import requests
 import subprocess
 
 MAX_SERVERS = 3
+STATIC_CLUSTER = False  # Set to True to pre-spawn all 3 nodes and bypass Nginx reloads under heavy stress testing
 
 NODES = [
     {"id": "Server-Alpha", "port": 8001, "active": True, "process": None},
@@ -46,9 +47,9 @@ def update_nginx_upstream():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        print(f"[Auto-Scale] 🔄 Nginx reloaded (Active: Alpha={'ON' if NODES[0]['active'] else 'OFF'}, Beta={'ON' if NODES[1]['active'] else 'OFF'}, Gamma={'ON' if NODES[2]['active'] else 'OFF'})")
+        print(f"[Auto-Scale]  Nginx reloaded (Active: Alpha={'ON' if NODES[0]['active'] else 'OFF'}, Beta={'ON' if NODES[1]['active'] else 'OFF'}, Gamma={'ON' if NODES[2]['active'] else 'OFF'})")
     except Exception as e:
-        print(f"[Auto-Scale] ⚠️ Failed to dynamically reload Nginx: {e}")
+        print(f"[Auto-Scale] ️ Failed to dynamically reload Nginx: {e}")
 
 def get_nginx_active_connections(session):
     try:
@@ -61,7 +62,7 @@ def get_nginx_active_connections(session):
     return 0
 
 def monitor_and_autoscale():
-    print("[Monitor] 👁️  System monitoring and auto-scaler started (Nginx is Proxying).")
+    print("[Monitor] ️  System monitoring and auto-scaler started (Nginx is Proxying).")
     python_exe = sys.executable
     manage_py = os.path.join(os.path.dirname(os.path.dirname(__file__)), "manage.py")
     
@@ -83,7 +84,14 @@ def monitor_and_autoscale():
         for node in active_nodes:
             try:
                 metrics_url = f"http://127.0.0.1:{node['port']}/system/local-metrics?exclude_db=true"
-                resp = session.get(metrics_url, timeout=2)
+                for attempt in range(10):
+                    try:
+                        resp = session.get(metrics_url, timeout=2)
+                        break
+                    except Exception as e:
+                        if attempt == 2:
+                            raise e
+                        time.sleep(0.5)
                 if resp.status_code == 200:
                     data = resp.json()
                     sys_data = data.get("system", {})
@@ -106,15 +114,15 @@ def monitor_and_autoscale():
                     total_running += int(node_load * capacity)
                     total_max += capacity
                     
-                    # 🚀 AGGRESSIVE SOFTWARE/PHYSICAL OVERLOAD CHECK
-                    if running >= pool_data.get("max_workers", 20):
+                    #  AGGRESSIVE SOFTWARE/PHYSICAL OVERLOAD CHECK
+                    if running >= pool_data.get("max_workers", 20) and active_count < MAX_SERVERS:
                         is_overloaded = True
-                        print(f"\n[Monitor] ⚠️  THREAD POOL EXHAUSTED on {node['id']} ({running} threads busy). Scaling up!")
-                    elif cpu >= 80.0:
+                        print(f"\n[Monitor] ️  THREAD POOL EXHAUSTED on {node['id']} ({running} threads busy). Scaling up!")
+                    elif cpu >= 80.0 and active_count < MAX_SERVERS:
                         is_overloaded = True
-                        print(f"\n[Monitor] 🔥 CPU OVERLOADED on {node['id']} ({cpu}% CPU utilization). Scaling up!")
+                        print(f"\n[Monitor]  CPU OVERLOADED on {node['id']} ({cpu}% CPU utilization). Scaling up!")
             except Exception as e:
-                sys.stdout.write(f"\n[Monitor] ⚠️ Error querying {node['id']} metrics: {e}\n")
+                sys.stdout.write(f"\n[Monitor] ️ Error querying {node['id']} metrics: {e}\n")
                 sys.stdout.flush()
                 # If an active node is unresponsive or times out, it is highly likely overloaded or locked up.
                 # Treat it as fully saturated (100% capacity) to trigger robust scale-up!
@@ -133,14 +141,17 @@ def monitor_and_autoscale():
             is_overloaded = True
             
         # Display real-time telemetry line (always updated, never frozen)
-        status_msg = f"[Monitor] 📈 Load: {cluster_load_pct:.1f}% | Nginx Conns: {nginx_conns} | Active Nodes: {active_count}"
+        status_msg = f"[Monitor]  Load: {cluster_load_pct:.1f}% | Nginx Conns: {nginx_conns} | Active Nodes: {active_count}"
         if is_overloaded:
-            status_msg += " (Overloaded! 🔥)"
+            status_msg += " (Overloaded)"
         else:
             status_msg += " (Healthy)      "
         sys.stdout.write(f"\r{status_msg}")
         sys.stdout.flush()
         
+        if STATIC_CLUSTER:
+            continue
+            
         now = time.time()
         
         # 2. Auto-Scale Provisioning
@@ -149,79 +160,56 @@ def monitor_and_autoscale():
             if active_count < MAX_SERVERS:
                 for node in NODES:
                     if not node["active"]:
-                        print(f"\n[Auto-Scale] 🚀 PROVISIONING NEW SERVER: {node['id']} on Port {node['port']}")
+                        print(f"\n[Auto-Scale] PROVISIONING NEW SERVER: {node['id']} on Port {node['port']}")
                         
                         process = subprocess.Popen(
-                            [python_exe, manage_py, "runserver", "--noreload", str(node['port'])],
+                            [python_exe, "-m", "waitress", f"--listen=127.0.0.1:{node['port']}", "--threads=40", "ecommerce_backend.wsgi:application"],
+                            cwd=os.path.dirname(manage_py),
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL
                         )
                         node["process"] = process
                         
-                        print(f"[Auto-Scale] ⏳ Booting {node['id']}...")
+                        print(f"[Auto-Scale]  Booting {node['id']}...")
                         time.sleep(5)  # Wait for Server to fully bind port and initialize Django WSGI
                         
                         # Once server is fully ready, mark active and update Nginx!
                         node["active"] = True
                         update_nginx_upstream()
                         last_scale_up_time = time.time()  # Reset scale-up cooldown timer!
-                        print(f"[Auto-Scale] ✅ {node['id']} is ONLINE and receiving traffic.\n")
+                        print(f"[Auto-Scale]  {node['id']} is ONLINE and receiving traffic.\n")
                         break
         
         # 3. Auto-Scale Down
         elif active_count > 1:
-            # Anti-Flapping Cooldown: Enforce that we wait at least 2 minutes (120s) since the last scale-up
+            # Anti-Flapping Cooldown: Enforce that we wait at least 120 seconds since the last scale-up
             scale_up_elapsed = now - last_scale_up_time
             if scale_up_elapsed < 120:
                 time_left = int(120 - scale_up_elapsed)
-                sys.stdout.write(f"\r[Monitor] ⏳ Scale-up cooldown active. Scale-down blocked for {time_left} seconds...          ")
+                sys.stdout.write(f"\r[Monitor]  Scale-up cooldown active. Scale-down blocked for {time_left} seconds...          ")
+                sys.stdout.flush()
+                continue
+                
+            node_to_kill = active_nodes[-1]
+            
+            # Robust, metrics-based idle check: cluster load is low and Nginx connections are low
+            is_idle = (cluster_load_pct < 15.0) and (nginx_conns < 15)
+            
+            if not is_idle:
+                last_surge_time = now
+                sys.stdout.write(f"\r[Monitor] ️ Cluster is active. Idle timer reset.          ")
                 sys.stdout.flush()
                 continue
                 
             idle_time = now - last_surge_time
-            node_to_kill = active_nodes[-1]
-            
-            # Check if ANY active node in the entire cluster is still busy
-            # We only scale down if the entire cluster has been completely idle
-            cluster_busy = False
-            for node in active_nodes:
-                try:
-                    metrics_url = f"http://127.0.0.1:{node['port']}/system/local-metrics?exclude_db=true"
-                    resp = session.get(metrics_url, timeout=2)
-                    if resp.status_code == 200:
-                        res_data = resp.json()
-                        sys_data = res_data.get("system", {})
-                        server_data = res_data.get("server", {})
-                        in_system = sys_data.get("total_in_system", 0)
-                        running_threads = sys_data.get("thread_pool", {}).get("running_threads", 0)
-                        cpu = server_data.get("cpu_percent", 0.0)
-                        
-                        if in_system > 0 or running_threads > 0 or cpu > 40.0:
-                            cluster_busy = True
-                            break
-                    else:
-                        cluster_busy = True
-                        break
-                except (requests.Timeout, requests.ConnectionError):
-                    cluster_busy = True
-                    break
-                except Exception:
-                    pass
-                
-            if cluster_busy:
-                last_surge_time = now
-                sys.stdout.write(f"\r[Monitor] ⚙️ Cluster is active. Idle timer reset.          ")
+            if idle_time < 30:
+                time_left = int(30 - idle_time)
+                sys.stdout.write(f"\r[Monitor]  Entire cluster idle. Shutting down {node_to_kill['id']} in {time_left} seconds...          ")
                 sys.stdout.flush()
                 continue
                 
-            if idle_time < 120:
-                time_left = int(120 - idle_time)
-                sys.stdout.write(f"\r[Monitor] ⏳ Entire cluster idle. Shutting down {node_to_kill['id']} in {time_left} seconds...          ")
-                sys.stdout.flush()
-                continue
-                
-            print(f"\n\n[Monitor] 📉 IDLE DETECTED! (Server idle for 2 minutes)")
-            print(f"[Auto-Scale] 🛑 TERMINATING IDLE SERVER: {node_to_kill['id']} to save CPU/RAM.")
+            print(f"\n\n[Monitor]  IDLE DETECTED! (Server idle for 30 seconds)")
+            print(f"[Auto-Scale]  TERMINATING IDLE SERVER: {node_to_kill['id']} to save CPU/RAM.")
             
             # 1. First tell Nginx to stop routing to it immediately!
             node_to_kill["active"] = False
@@ -251,7 +239,7 @@ def monitor_and_autoscale():
                 except Exception:
                     pass
                 
-            print(f"[Auto-Scale] 💤 {node_to_kill['id']} has been shut down.\n")
+            print(f"[Auto-Scale]  {node_to_kill['id']} has been shut down.\n")
             last_surge_time = now
 
 if __name__ == "__main__":
@@ -259,25 +247,47 @@ if __name__ == "__main__":
     print("AUTO-SCALER PROCESS MANAGER STARTING")
     print("==========================================")
     
-    primary_node = NODES[0]
     python_exe = sys.executable
     manage_py = os.path.join(os.path.dirname(os.path.dirname(__file__)), "manage.py")
     
-    # Clean and sync Nginx state at startup
-    update_nginx_upstream()
-    
-    print(f"[System] Starting Primary Node: {primary_node['id']} on Port {primary_node['port']}")
-    primary_node["process"] = subprocess.Popen(
-        [python_exe, manage_py, "runserver", "--noreload", str(primary_node['port'])],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    
-    print("[System] ⏳ Waiting 5 seconds for Server-Alpha to boot...")
-    time.sleep(5)
-    print("[System] ✅ Server-Alpha is ready!")
-    print("[System] 🚦 Nginx should be configured to listen on Port 8080.")
-    print("==========================================")
+    if STATIC_CLUSTER:
+        print("[System]  Launching static high-throughput cluster (all 3 nodes active)...")
+        for node in NODES:
+            node["active"] = True
+            print(f"[System] Starting {node['id']} on Port {node['port']}")
+            node["process"] = subprocess.Popen(
+                [python_exe, "-m", "waitress", f"--listen=127.0.0.1:{node['port']}", "--threads=40", "ecommerce_backend.wsgi:application"],
+                cwd=os.path.dirname(manage_py),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        
+        # Clean and sync Nginx state at startup
+        update_nginx_upstream()
+        
+        print("[System]  Waiting 5 seconds for all servers to boot...")
+        time.sleep(5)
+        print("[System]  All 3 cluster nodes are ready and active under Nginx!")
+        print("[System]  Nginx is active on Port 8080.")
+        print("==========================================")
+    else:
+        primary_node = NODES[0]
+        # Clean and sync Nginx state at startup
+        update_nginx_upstream()
+        
+        print(f"[System] Starting Primary Node: {primary_node['id']} on Port {primary_node['port']}")
+        primary_node["process"] = subprocess.Popen(
+            [python_exe, "-m", "waitress", f"--listen=127.0.0.1:{primary_node['port']}", "--threads=40", "ecommerce_backend.wsgi:application"],
+            cwd=os.path.dirname(manage_py),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        print("[System]  Waiting 5 seconds for Server-Alpha to boot...")
+        time.sleep(5)
+        print("[System]  Server-Alpha is ready!")
+        print("[System]  Nginx should be configured to listen on Port 8080.")
+        print("==========================================")
     
     try:
         monitor_and_autoscale()

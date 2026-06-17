@@ -39,6 +39,7 @@ class ResourceManagerMiddleware:
         if request.path in OBSERVABILITY_PATHS:
             return self.get_response(request)
 
+        start_wait = time.perf_counter()
         # ---- try to acquire a processing slot ----
         if not resource_manager.acquire():
             logger.warning(
@@ -54,6 +55,7 @@ class ResourceManagerMiddleware:
                 status=503,
             )
 
+        request.queue_time = time.perf_counter() - start_wait
         start = time.perf_counter()
         try:
             response = self.get_response(request)

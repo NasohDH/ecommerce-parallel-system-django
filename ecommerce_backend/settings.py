@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = "django-insecure-ecommerce-backend-local-development-key"
 DEBUG = True
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "django_prometheus",
@@ -22,6 +22,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    "store.middleware.profiler.SafeTimingMiddleware",
 
     "django.middleware.security.SecurityMiddleware",
     "ecommerce_backend.resource_middleware.ResourceManagerMiddleware",
@@ -59,6 +60,16 @@ DATABASES = {
     }
 }
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
@@ -80,8 +91,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
-    ],
-    "UNAUTHENTICATED_USER": None,
+    ],    "UNAUTHENTICATED_USER": None,
 }
 
 
@@ -100,6 +110,6 @@ from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     "daily_sales_batch_job": {
         "task": "store.services.sales.batch_processing.trigger_daily_sales_batch",
-        "schedule": crontab(hour=0, minute=0),  # Runs every day at 12:00 AM midnight
+        "schedule": crontab(hour=0, minute=0),
     },
 }

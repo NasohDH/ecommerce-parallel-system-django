@@ -8,8 +8,9 @@ class DailySalesReport(models.Model):
         choices=[
             ("pending", "Pending"),
             ("processing", "Processing"),
+            ("finalizing", "Finalizing"),  # Transient mutex state — claimed by the winning chunk
             ("completed", "Completed"),
-            ("failed", "Failed")
+            ("failed", "Failed"),
         ],
         default="pending"
     )
@@ -17,6 +18,8 @@ class DailySalesReport(models.Model):
     processed_orders = models.IntegerField(default=0)
     total_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     pdf_report_path = models.CharField(max_length=500, blank=True, null=True)
+    pdf_generation_time = models.FloatField(default=0.0)
+    total_execution_time = models.FloatField(default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

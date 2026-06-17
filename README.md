@@ -1,5 +1,9 @@
 # Run The Project
 
+> [!IMPORTANT]
+> ### ️ System Architecture, Load Balancing & Auto-Scaling
+> We have implemented an advanced, high-performance **Nginx Load Balancer** and a **Dynamic Auto-Scaling Daemon** inside this system. For a complete deep-dive on Nginx configurations, backpressure middlewares, dynamic node provisioning thresholds, and metrics telemetry, see the **[Load Balancing & Nginx Architecture Guide](file:///c:/Users/Pro/Desktop/ecommerce-parallel-system-django/LOAD_BALANCING_NGINX.md)**!
+
 ## Requirements
 
 - Python 3.9+
@@ -55,13 +59,13 @@ The ecommerce models are unmanaged so Django will not create or delete the exist
 Make sure MySQL is running in XAMPP, then run:
 
 ```powershell
-python manage.py runserver 127.0.0.1:8000
+python manage.py runserver 127.0.0.1:8080
 ```
 
 App URL:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8080
 ```
 
 ## Nginx Commands
@@ -159,13 +163,13 @@ Stop-Process -Id <PID> -Force
 Scalar API docs:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8080/docs
 ```
 
 OpenAPI schema:
 
 ```text
-http://127.0.0.1:8000/openapi.json
+http://127.0.0.1:8080/openapi.json
 ```
 
 ```text

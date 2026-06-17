@@ -13,3 +13,9 @@ class Product(models.Model):
     class Meta:
         managed = False
         db_table = "products"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from django.core.cache import cache
+        # Delete only the specific product cache, not the list cache
+        cache.delete(f"product_detail_{self.id}")

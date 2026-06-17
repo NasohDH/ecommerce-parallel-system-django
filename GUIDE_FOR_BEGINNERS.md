@@ -1,4 +1,4 @@
-# 🚀 Beginner's Guide: Understanding the Parallel E-commerce System
+#  Beginner's Guide: Understanding the Parallel E-commerce System
 
 Welcome! Since this is your first time working with Django and you're building a system designed for "Parallelism" (handling many things at once), this guide will explain the concepts from scratch with real-world analogies and code examples.
 

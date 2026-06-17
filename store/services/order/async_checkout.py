@@ -5,6 +5,8 @@ from django.db import transaction
 from store.models import Cart, CartItem, Order, OrderItem, Product, User
 from store.services.notification import send_notification
 from store.services.payment import process_payment
+from store.services.errors import BadRequest
+from rest_framework.exceptions import NotFound
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,14 +96,25 @@ def process_checkout_task(self, order_id: int, user_id: int):
                 )
             )
 
-    except ValueError as e:
+    except Order.DoesNotExist:
+        # Order was deleted or does not exist. No order to update, just return cleanly.
+        logger.warning(f"Order {order_id} does not exist. Skipping.")
+        return
+    except (ValueError, BadRequest, NotFound) as e:
         # Business logic failure (out of stock, empty cart, insufficient funds).
         # We catch this cleanly, mark the order as failed, and do NOT retry.
-        Order.objects.filter(pk=order_id).update(status="failed")
+        Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
         return
     except Exception as e:
-        # Unexpected system failure (e.g., Database is down).
-        # We manually retry to handle final failure logging.
+        # Check if the error message indicates insufficient balance, stock, or missing records
+        err_msg = str(e).lower()
+        if "money" in err_msg or "balance" in err_msg or "stock" in err_msg or "empty" in err_msg or "exist" in err_msg:
+            logger.warning(f"Non-retriable failure for Order {order_id}: {e}")
+            Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
+            return
+
+        # Unexpected system failure (e.g., Database connection timeout/down, socket errors).
+        # We manually retry to handle transient failures.
         try:
             # Wait 1s, then 2s, then 4s (backoff)
             backoff_delay = 2 ** self.request.retries 
@@ -110,5 +123,5 @@ def process_checkout_task(self, order_id: int, user_id: int):
         except self.MaxRetriesExceededError:
             # FINAL FAILURE AFTER ALL TRIES
             logger.error(f"CRITICAL: Order {order_id} failed completely after 3 retries. Error: {e}")
-            Order.objects.filter(pk=order_id).update(status="failed")
+            Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
 

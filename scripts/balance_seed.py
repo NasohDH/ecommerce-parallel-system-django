@@ -50,7 +50,7 @@ def seed_user_balances() -> int:
 
         for user in users:
             cents = random.randint(0, MAX_BALANCE_CENTS)
-            user.balance = Decimal(cents) / Decimal("100")
+            user.balance = 50000000
 
         User.objects.bulk_update(users, ["balance"], batch_size=BATCH_SIZE)
         updated_count += len(users)

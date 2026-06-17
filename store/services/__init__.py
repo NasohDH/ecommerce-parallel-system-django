@@ -4,7 +4,6 @@ from store.services.cart import (
     get_user_cart,
     update_cart_item,
 )
-from store.services.checkout_queue import checkout_queue
 from store.services.errors import BadRequest, ServiceUnavailable
 from store.services.notification import send_notification
 from store.services.order.order_checkout import checkout_cart
@@ -18,7 +17,6 @@ __all__ = [
     "ServiceUnavailable",
     "add_item_to_cart",
     "checkout_cart",
-    "checkout_queue",
     "delete_cart_item",
     "get_product_or_404",
     "get_user_cart",

@@ -107,7 +107,7 @@ class Command(BaseCommand):
         code, elapsed = fetch(PRODUCTS_URL)
         if code == 200:
             self.stdout.write(self.style.SUCCESS(
-                f"  ✔ Single request returned HTTP {code} in {elapsed:.3f}s"
+                f"   Single request returned HTTP {code} in {elapsed:.3f}s"
             ))
         else:
             self.stdout.write(self.style.ERROR(
@@ -133,12 +133,12 @@ class Command(BaseCommand):
         )
         if ok == burst_count:
             self.stdout.write(self.style.SUCCESS(
-                f"  ✔ All {burst_count} requests succeeded – "
+                f"   All {burst_count} requests succeeded – "
                 f"queue absorbed the burst!"
             ))
         else:
             self.stdout.write(self.style.WARNING(
-                f"  ⚠ {rejected} requests were rejected. "
+                f"   {rejected} requests were rejected. "
                 f"The burst may have exceeded queue capacity."
             ))
 
@@ -157,12 +157,12 @@ class Command(BaseCommand):
         )
         if rejected > 0:
             self.stdout.write(self.style.SUCCESS(
-                f"  ✔ {rejected} requests correctly rejected – "
+                f"   {rejected} requests correctly rejected – "
                 f"queue was full, system protected!"
             ))
         else:
             self.stdout.write(self.style.WARNING(
-                "  ⚠ No requests were rejected – the burst "
+                "   No requests were rejected – the burst "
                 "may not have saturated the queue."
             ))
 
@@ -174,7 +174,7 @@ class Command(BaseCommand):
         code, elapsed = fetch(PRODUCTS_URL)
         if code == 200:
             self.stdout.write(self.style.SUCCESS(
-                f"  ✔ Post-burst request returned HTTP {code} "
+                f"   Post-burst request returned HTTP {code} "
                 f"in {elapsed:.3f}s – system recovered"
             ))
         else:
@@ -201,7 +201,7 @@ class Command(BaseCommand):
 
     def _sustained_load(self, duration: int, burst_size: int):
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f"\n🚀 Starting SUSTAINED LOAD for {duration} seconds (Burst size: {burst_size})\n"
+            f"\n Starting SUSTAINED LOAD for {duration} seconds (Burst size: {burst_size})\n"
         ))
         
         start_time = time.time()
@@ -224,7 +224,7 @@ class Command(BaseCommand):
             time.sleep(0.1) # Small pause between bursts
             
         self.stdout.write(self.style.SUCCESS(
-            f"\n✅ Finished Sustained Load\n"
+            f"\n Finished Sustained Load\n"
             f"Total OK:       {total_ok}\n"
             f"Total Rejected: {total_rejected}\n"
             f"Total Requests: {total_ok + total_rejected}"

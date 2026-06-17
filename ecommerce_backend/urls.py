@@ -12,8 +12,141 @@ from django.urls import include, path
 
 from ecommerce_backend.openapi import OPENAPI_SCHEMA
 from ecommerce_backend.resource_manager import resource_manager
-from store.services.checkout_queue import checkout_queue
 from store.models import Order, DailySalesReport, DeadLetterSales
+
+from prometheus_client import REGISTRY
+from prometheus_client.core import GaugeMetricFamily
+
+def _get_active_db_connections():
+    try:
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW STATUS LIKE 'Threads_connected';")
+            row = cursor.fetchone()
+            return int(row[1]) if row else 0
+    except Exception:
+        return 0
+
+class WindowsProcessCollector:
+    def __init__(self):
+        self.process = psutil.Process(os.getpid())
+        self.process.cpu_percent(interval=None)
+
+    def collect(self):
+        try:
+            cpu_percent = self.process.cpu_percent(interval=None)
+            g_cpu = GaugeMetricFamily("django_node_cpu_percent", "CPU utilization percentage of this Django node process")
+            g_cpu.add_metric([], cpu_percent)
+            yield g_cpu
+        except Exception:
+            pass
+        try:
+            memory_mb = self.process.memory_info().rss / (1024 * 1024)
+            g_mem = GaugeMetricFamily("django_node_memory_mb", "Memory usage of this Django node process in MB")
+            g_mem.add_metric([], memory_mb)
+            yield g_mem
+        except Exception:
+            pass
+        try:
+            sys_cpu = psutil.cpu_percent(interval=None)
+            g_sys_cpu = GaugeMetricFamily("system_cpu_percent", "Total system CPU utilization percentage")
+            g_sys_cpu.add_metric([], sys_cpu)
+            yield g_sys_cpu
+        except Exception:
+            pass
+        try:
+            sys_mem = psutil.virtual_memory().percent
+            g_sys_mem = GaugeMetricFamily("system_memory_percent", "Total system memory utilization percentage")
+            g_sys_mem.add_metric([], sys_mem)
+            yield g_sys_mem
+        except Exception:
+            pass
+        try:
+            metrics = resource_manager.get_metrics()
+            tp = metrics["thread_pool"]
+            g_max_workers = GaugeMetricFamily("django_system_max_workers", "Max workers limit in the thread pool")
+            g_max_workers.add_metric([], tp["max_workers"])
+            yield g_max_workers
+            g_spawned = GaugeMetricFamily("django_system_spawned_threads", "Total spawned threads currently alive")
+            g_spawned.add_metric([], tp["spawned_threads"])
+            yield g_spawned
+            g_busy = GaugeMetricFamily("django_system_busy_threads", "Busy threads currently processing requests")
+            g_busy.add_metric([], tp["running_threads"])
+            yield g_busy
+            g_idle = GaugeMetricFamily("django_system_idle_threads", "Idle threads waiting for work")
+            g_idle.add_metric([], tp["idle_waiting_to_die"])
+            yield g_idle
+        except Exception:
+            pass
+        try:
+            metrics = resource_manager.get_metrics()
+            gq = metrics["global_queue"]
+            g_max_q = GaugeMetricFamily("django_system_max_queue_size", "Max capacity of the global waiting queue")
+            g_max_q.add_metric([], gq["max_queue_size"])
+            yield g_max_q
+            g_waiting = GaugeMetricFamily("django_system_waiting_requests", "Number of requests waiting in queue")
+            g_waiting.add_metric([], gq["waiting_requests"])
+            yield g_waiting
+            g_rem_q = GaugeMetricFamily("django_system_remaining_queue_slots", "Remaining queue slots available")
+            g_rem_q.add_metric([], gq["remaining_queue_slots"])
+            yield g_rem_q
+            g_rejected = GaugeMetricFamily("django_system_rejected_requests_total", "Total requests rejected due to full queue")
+            g_rejected.add_metric([], metrics["rejected_total"])
+            yield g_rejected
+        except Exception:
+            pass
+        try:
+            g_pending = GaugeMetricFamily("django_checkout_pending_orders", "Count of orders in pending status")
+            g_pending.add_metric([], Order.objects.filter(status="pending").count())
+            yield g_pending
+            g_completed = GaugeMetricFamily("django_checkout_completed_orders", "Count of orders in completed status")
+            g_completed.add_metric([], Order.objects.filter(status="completed").count())
+            yield g_completed
+            g_failed = GaugeMetricFamily("django_checkout_failed_orders", "Count of orders in failed status")
+            g_failed.add_metric([], Order.objects.filter(status="failed").count())
+            yield g_failed
+        except Exception:
+            pass
+        try:
+            latest_report = DailySalesReport.objects.order_by("-date").first()
+            if latest_report:
+                status_val = 0
+                status_str = latest_report.status.lower()
+                if "success" in status_str or "complete" in status_str:
+                    status_val = 2
+                elif "process" in status_str:
+                    status_val = 1
+                elif "fail" in status_str:
+                    status_val = 3
+                g_status = GaugeMetricFamily("django_daily_batch_status", "Status code of the latest daily sales batch")
+                g_status.add_metric([], status_val)
+                yield g_status
+                g_batch_total = GaugeMetricFamily("django_daily_batch_total_orders", "Total orders in the latest daily batch")
+                g_batch_total.add_metric([], latest_report.total_orders)
+                yield g_batch_total
+                g_batch_proc = GaugeMetricFamily("django_daily_batch_processed_orders", "Processed orders in the latest daily batch")
+                g_batch_proc.add_metric([], latest_report.processed_orders)
+                yield g_batch_proc
+                g_batch_rev = GaugeMetricFamily("django_daily_batch_revenue", "Total revenue calculated in the latest daily batch")
+                g_batch_rev.add_metric([], float(latest_report.total_revenue))
+                yield g_batch_rev
+                dead_letters = DeadLetterSales.objects.filter(report=latest_report).count()
+                g_batch_dl = GaugeMetricFamily("django_daily_batch_dead_letters", "Failed sales records in the dead letter queue")
+                g_batch_dl.add_metric([], dead_letters)
+                yield g_batch_dl
+        except Exception:
+            pass
+        try:
+            g_db_conns = GaugeMetricFamily("django_db_active_connections", "Number of active database connections")
+            g_db_conns.add_metric([], _get_active_db_connections())
+            yield g_db_conns
+        except Exception:
+            pass
+
+try:
+    REGISTRY.register(WindowsProcessCollector())
+except ValueError:
+    pass
 
 # Persistent global process handle so cpu_percent retains state between calls
 _GLOBAL_PROCESS = psutil.Process(os.getpid())
@@ -28,6 +161,17 @@ _CACHED_CPU = 0.0
 _LAST_SYSTEM_CPU_TIME = 0.0
 _CACHED_SYSTEM_CPU = 0.0
 
+# Async checkout and daily sales batch caching to guarantee 100% non-blocking database queries in the hot metrics path
+_ASYNC_CHECKOUT_LOCK = Lock()
+_LAST_ASYNC_CHECKOUT_FETCH = 0.0
+_CACHED_PENDING = 0
+_CACHED_COMPLETED = 0
+_CACHED_FAILED = 0
+
+_DAILY_BATCH_LOCK = Lock()
+_LAST_DAILY_BATCH_FETCH = 0.0
+_CACHED_DAILY_BATCH = None
+
 
 def root_view(request):
     return JsonResponse({"message": "E-commerce API is running"})
@@ -39,6 +183,8 @@ def openapi_view(request):
 
 def _local_metrics_payload(server_url=None, online=True, error=None, exclude_db=False):
     global _GLOBAL_PROCESS, _METRICS_LOCK, _LAST_CPU_TIME, _CACHED_CPU, _LAST_SYSTEM_CPU_TIME, _CACHED_SYSTEM_CPU
+    global _ASYNC_CHECKOUT_LOCK, _LAST_ASYNC_CHECKOUT_FETCH, _CACHED_PENDING, _CACHED_COMPLETED, _CACHED_FAILED
+    global _DAILY_BATCH_LOCK, _LAST_DAILY_BATCH_FETCH, _CACHED_DAILY_BATCH
     try:
         now = time.time()
         with _METRICS_LOCK:
@@ -62,6 +208,31 @@ def _local_metrics_payload(server_url=None, online=True, error=None, exclude_db=
         system_cpu = 0.0
         system_memory = 0.0
 
+    now = time.time()
+    # Non-blocking db counts fetch for Async Checkout Celery metrics (refreshes at most once every 5 seconds)
+    if now - _LAST_ASYNC_CHECKOUT_FETCH >= 5.0:
+        if _ASYNC_CHECKOUT_LOCK.acquire(blocking=False):
+            try:
+                _CACHED_PENDING = Order.objects.filter(status="pending").count()
+                _CACHED_COMPLETED = Order.objects.filter(status="completed").count()
+                _CACHED_FAILED = Order.objects.filter(status="failed").count()
+                _LAST_ASYNC_CHECKOUT_FETCH = now
+            except Exception:
+                pass
+            finally:
+                _ASYNC_CHECKOUT_LOCK.release()
+
+    # Non-blocking db query fetch for Daily Sales Batch metrics (refreshes at most once every 5 seconds)
+    if now - _LAST_DAILY_BATCH_FETCH >= 5.0:
+        if _DAILY_BATCH_LOCK.acquire(blocking=False):
+            try:
+                _CACHED_DAILY_BATCH = _get_daily_batch_metrics()
+                _LAST_DAILY_BATCH_FETCH = now
+            except Exception:
+                pass
+            finally:
+                _DAILY_BATCH_LOCK.release()
+
     payload = {
         "online": online,
         "server": {
@@ -74,20 +245,18 @@ def _local_metrics_payload(server_url=None, online=True, error=None, exclude_db=
             "system_memory_percent": round(system_memory, 2),
         },
         "system": resource_manager.get_metrics(),
-        "checkout_queue": checkout_queue.get_metrics(),
+        "checkout_queue": None,
+        "db_active_connections": _get_active_db_connections(),
         "error": error,
+        "async_checkout": {
+            "pending_orders": _CACHED_PENDING,
+            "completed_orders": _CACHED_COMPLETED,
+            "failed_orders": _CACHED_FAILED,
+        },
+        "daily_batch": _CACHED_DAILY_BATCH,
     }
-    if not exclude_db:
-        payload["async_checkout"] = {
-            "pending_orders": Order.objects.filter(status="pending").count(),
-            "completed_orders": Order.objects.filter(status="completed").count(),
-            "failed_orders": Order.objects.filter(status="failed").count(),
-        }
-    else:
-        payload["async_checkout"] = None
-        
-    payload["daily_batch"] = _get_daily_batch_metrics()
     return payload
+
 
 def _get_daily_batch_metrics():
     latest_report = DailySalesReport.objects.order_by("-date").first()
@@ -135,6 +304,7 @@ def _fetch_server_metrics(server_url, current_url, exclude_db=False):
             },
             "system": None,
             "checkout_queue": None,
+            "db_active_connections": 0,
             "async_checkout": None,
             "error": str(exc),
         }
@@ -223,21 +393,13 @@ def system_dashboard_view(request):
         max_workers: "Max workers (Limit)",
         spawned_threads: "Total Threads Alive",
         running_threads: "Busy Threads (Processing)",
-        idle_waiting_to_die: "Idle Threads (Ready & Waiting)",
-        max_queue_size: "Queue capacity",
-        waiting_requests: "Waiting requests",
-        remaining_queue_slots: "Remaining queue slots",
-        total_capacity: "Total capacity",
-        total_in_system: "Total in system",
-        remaining_capacity: "Remaining capacity",
-        rejected_total: "Rejected",
-        waiting_tasks: "Checkout in queue",
-        running_tasks: "Checkout processing",
-        tracked_jobs: "Tracked jobs",
-        enqueued_total: "Checkout requests in",
-        completed_total: "Checkout done",
-        failed_total: "Checkout failed",
-        worker_alive: "Checkout worker alive",
+        idle_waiting_to_die: "Idle Worker Threads",
+        max_queue_size: "Queue Capacity",
+        waiting_requests: "Requests Waiting",
+        remaining_queue_slots: "Queue Slots Remaining",
+        total_capacity: "Max System Concurrency",
+        rejected_total: "Lifetime Rejections",
+        db_active_connections: "Active DB Connections",
         pending_orders: "Pending Orders (In Queue)",
         completed_orders: "Completed Orders",
         failed_orders: "Failed Orders",
@@ -306,9 +468,8 @@ def system_dashboard_view(request):
             <h3>System Totals</h3>
             <div class="grid">${metricCards(server.system ? {
               total_capacity: server.system.total_capacity,
-              total_in_system: server.system.total_in_system,
-              remaining_capacity: server.system.remaining_capacity,
-              rejected_total: server.system.rejected_total
+              rejected_total: server.system.rejected_total,
+              db_active_connections: server.db_active_connections !== undefined ? server.db_active_connections : "N/A"
             } : null)}</div>
             <h3>Checkout Queue (Legacy)</h3>
             <div class="grid">${metricCards(server.checkout_queue || {})}</div>

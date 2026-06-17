@@ -1,10 +1,10 @@
-# 🏗️ Detailed Project Structure: E-commerce Parallel System
+# ️ Detailed Project Structure: E-commerce Parallel System
 
 This document provides an exhaustive breakdown of every directory and file in the project, explaining their purpose, contents, and how they contribute to the high-concurrency architecture.
 
 ---
 
-## 📂 Root Directory
+##  Root Directory
 *   **`manage.py`**: The entry point for all Django administrative commands. It sets up the environment and executes commands like `runserver`, `migrate`, and `shell`.
 *   **`requirements.txt`**: Lists all Python dependencies (Django, DRF, PyMySQL, Redis, Celery, etc.) required to run the project.
 *   **`PROJECT_STRUCTURE.md`**: (This file) A guide to the system's architecture.
@@ -12,7 +12,7 @@ This document provides an exhaustive breakdown of every directory and file in th
 
 ---
 
-## ⚙️ `ecommerce_backend/` (Project Core)
+## ️ `ecommerce_backend/` (Project Core)
 This directory contains the global configuration and the "System Architecture" layers.
 
 *   **`settings.py`**: The "Brain" of the project. Contains database credentials, Redis/Celery configuration, and custom parallel system "knobs" like `SYSTEM_MAX_WORKERS`.
@@ -28,41 +28,41 @@ This directory contains the global configuration and the "System Architecture" l
 
 ---
 
-## 🛒 `store/` (Business Logic App)
+##  `store/` (Business Logic App)
 This app contains the e-commerce domain logic. It is organized into sub-packages for clarity.
 
-### 🗃️ `store/models/` (Data Layer)
+### ️ `store/models/` (Data Layer)
 *   *Note: All models use `managed = False` to map to an existing external database.*
 *   **`user.py`**: Maps to the `users` table.
 *   **`product.py`**: Maps to the `products` table (includes stock management).
 *   **`cart.py`**: Maps to `carts` and `cart_items` tables.
 *   **`order.py`**: Maps to `orders` and `order_items` tables.
 
-### 🔌 `store/serializers/` (Data Transformation)
+###  `store/serializers/` (Data Transformation)
 *   Contains Django Rest Framework (DRF) serializers that convert database model instances into JSON format for the API.
 
-### 🎮 `store/views/` (Controllers)
+###  `store/views/` (Controllers)
 *   **`products.py` / `users.py` / `cart.py`**: Standard API views for CRUD operations.
 *   **`orders.py`**: Contains the complex checkout logic which interacts with the queue system.
 *   **`pagination.py`**: Utility for consistent `skip` and `limit` handling across all list endpoints.
 
-### 🧠 `store/services/` (Business Logic Layer)
+###  `store/services/` (Business Logic Layer)
 This is where the complex operations happen, separated from the views.
 *   **`checkout_queue.py`**: **[CRITICAL]** Implements a thread-safe internal queue. When a user checks out, their request is enqueued here to be processed sequentially, preventing race conditions (like over-selling stock).
 *   **`order/order_checkout.py`**: Contains the actual database transaction logic for creating an order and reducing stock.
 *   **`payment.py` / `notification.py`**: Mock services for handling payments and sending user alerts.
 
-### ⚡ `store/tasks.py`
+###  `store/tasks.py`
 *   Contains Celery tasks that run in the background (asynchronous), such as database cleanup or periodic reporting.
 
 ---
 
-## 📜 `scripts/`
+##  `scripts/`
 *   Contains Python scripts used to populate the database with seed data (`seed.py`) or perform stress tests.
 
 ---
 
-## 🔄 System Interaction Summary
+##  System Interaction Summary
 
 1.  **Request Arrival**: `resource_middleware.py` catches the request.
 2.  **Throttling**: `resource_manager.py` checks if there is room in the worker pool or queue.

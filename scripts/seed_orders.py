@@ -27,13 +27,13 @@ def main():
     products = list(Product.objects.filter(stock_quantity__gt=5)[:50])
     
     if not users:
-        print("⚠️ No users found in database! Please run `python scripts/seed.py` first to populate users.")
+        print("️ No users found in database! Please run `python scripts/seed.py` first to populate users.")
         return
     if not products:
-        print("⚠️ No products found in database! Please run `python scripts/seed.py` first to populate products.")
+        print("️ No products found in database! Please run `python scripts/seed.py` first to populate products.")
         return
         
-    print(f"🌱 Starting Order Seeder...")
+    print(f" Starting Order Seeder...")
     print(f"   Found {len(users)} users and {len(products)} products available for ordering.")
     
     orders_created = 0
@@ -85,7 +85,7 @@ def main():
         
         orders_created += 1
         
-    print(f"🎉 Seeding complete!")
+    print(f" Seeding complete!")
     print(f"   Successfully generated {orders_created} Orders and {items_created} Order Items!")
     print(f"   Orders are realistically distributed over today and yesterday.")
 
