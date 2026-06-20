@@ -6,7 +6,7 @@ from random import Random
 from django.utils import timezone
 import datetime
 
-# Configure stdout/stderr to use UTF-8 to safely handle emojis on Windows
+
 if sys.platform.startswith("win"):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -14,7 +14,7 @@ if sys.platform.startswith("win"):
     except AttributeError:
         pass
 
-# Setup Django environment
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ecommerce_backend.settings")
 django.setup()
@@ -39,13 +39,13 @@ def main():
     orders_created = 0
     items_created = 0
     
-    # We will generate 150 random orders spread across today and yesterday
+    
     for i in range(150000):
         user = random.choice(users)
         num_items = random.randint(1, 4)
         selected_products = random.sample(products, num_items)
         
-        # Create Order (initially pending with total_price=0.0)
+        
         order = Order(
             user=user,
             total_price=0.0,
@@ -69,17 +69,17 @@ def main():
             )
             items_created += 1
             
-        # Update Order's total price
+        
         order.total_price = round(total_price, 2)
         order.save()
         
-        # Set a realistic created_at timestamp spanning today or yesterday
+        
         days_ago = random.choice([0, 1])
         random_hour = random.randint(0, 23)
         random_minute = random.randint(0, 59)
         target_date = timezone.now() - datetime.timedelta(days=days_ago, hours=random_hour, minutes=random_minute)
         
-        # Force update using .update() to bypass auto_now_add restriction
+        
         Order.objects.filter(id=order.id).update(created_at=target_date)
         OrderItem.objects.filter(order_id=order.id).update(created_at=target_date)
         

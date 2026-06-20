@@ -13,20 +13,20 @@ logger = logging.getLogger(__name__)
 
 @shared_task(
     bind=True,
-    acks_late=True,                 # Don't delete from queue until completely successful
+    acks_late=True,                 
 )
 def process_checkout_task(self, order_id: int, user_id: int):
     try:
         with transaction.atomic():
-            # Use select_for_update to lock the order row during checks
+            
             order = Order.objects.select_for_update().get(pk=order_id)
             
-            # IDEMPOTENCY CHECK: If this message was delivered twice, skip it!
+            
             if order.status != "pending":
                 logger.info(f"Order {order_id} already processed (status: {order.status}). Skipping duplicate message.")
                 return
             
-            # Re-fetch cart with lock
+            
             cart = Cart.objects.select_for_update().filter(user_id=user_id).first()
             if not cart:
                 raise ValueError("Cart is empty")
@@ -63,15 +63,15 @@ def process_checkout_task(self, order_id: int, user_id: int):
                 total_price += subtotal
                 order_items_data.append((cart_item, product, unit_price, subtotal))
 
-            # Process payment (this locks the User)
+            
             process_payment(user_id=user_id, total_cart_price=total_price)
 
-            # Update Order
+            
             order.total_price = float(total_price)
             order.status = "completed"
             order.save(update_fields=["total_price", "status"])
 
-            # Create OrderItems and Update Stock
+            
             for cart_item, product, unit_price, subtotal in order_items_data:
                 product.stock_quantity -= cart_item.quantity
                 product.save(update_fields=["stock_quantity"])
@@ -83,10 +83,10 @@ def process_checkout_task(self, order_id: int, user_id: int):
                     subtotal=float(subtotal),
                 )
 
-            # Clear Cart
+            
             CartItem.objects.filter(cart=cart).delete()
 
-            # Trigger notification
+            
             transaction.on_commit(
                 lambda: send_notification.delay(
                     event="order_checkout",
@@ -97,31 +97,31 @@ def process_checkout_task(self, order_id: int, user_id: int):
             )
 
     except Order.DoesNotExist:
-        # Order was deleted or does not exist. No order to update, just return cleanly.
+        
         logger.warning(f"Order {order_id} does not exist. Skipping.")
         return
     except (ValueError, BadRequest, NotFound) as e:
-        # Business logic failure (out of stock, empty cart, insufficient funds).
-        # We catch this cleanly, mark the order as failed, and do NOT retry.
+        
+        
         Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
         return
     except Exception as e:
-        # Check if the error message indicates insufficient balance, stock, or missing records
+        
         err_msg = str(e).lower()
         if "money" in err_msg or "balance" in err_msg or "stock" in err_msg or "empty" in err_msg or "exist" in err_msg:
             logger.warning(f"Non-retriable failure for Order {order_id}: {e}")
             Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
             return
 
-        # Unexpected system failure (e.g., Database connection timeout/down, socket errors).
-        # We manually retry to handle transient failures.
+        
+        
         try:
-            # Wait 1s, then 2s, then 4s (backoff)
+            
             backoff_delay = 2 ** self.request.retries 
-            # Send to the back of the queue by scheduling in the future
+            
             self.retry(exc=e, countdown=backoff_delay, max_retries=3)
         except self.MaxRetriesExceededError:
-            # FINAL FAILURE AFTER ALL TRIES
+            
             logger.error(f"CRITICAL: Order {order_id} failed completely after 3 retries. Error: {e}")
             Order.objects.filter(pk=order_id).update(status="failed", error_message=str(e))
 

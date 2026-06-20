@@ -17,5 +17,5 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         from django.core.cache import cache
-        # Delete only the specific product cache, not the list cache
+        
         cache.delete(f"product_detail_{self.id}")

@@ -58,7 +58,7 @@ class ProductViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
                     except Exception:
                         pass
             else:
-                return Response({"error": "Server busy building cache, please try again in 10 seconds"}, status=200)
+                return Response({"error": "Server busy, please try again in 10 seconds"}, status=200)
 
     def list(self, request, *args, **kwargs):
         skip, limit = get_pagination_params(request)

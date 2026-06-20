@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from random import Random
 
-# Minimal changes to work with Django
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ecommerce_backend.settings")
 
@@ -111,7 +111,7 @@ def seed_users(session) -> None:
 
 
 def main() -> None:
-    # We pass None for session as we use Django ORM globally
+    
     seed_products(None)
     seed_users(None)
 

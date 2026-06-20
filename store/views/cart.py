@@ -27,15 +27,3 @@ class CartItemsView(APIView):
         return Response(CartSerializer(cart).data)
 
 
-class CartItemDetailView(APIView):
-    def put(self, request, cart_item_id: int):
-        serializer = UpdateCartItemSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        cart_item = services.update_cart_item(
-            cart_item_id=cart_item_id,
-            quantity=serializer.validated_data["quantity"],
-        )
-        return Response(CartItemSerializer(cart_item).data)
-
-    def delete(self, request, cart_item_id: int):
-        return Response(services.delete_cart_item(cart_item_id))

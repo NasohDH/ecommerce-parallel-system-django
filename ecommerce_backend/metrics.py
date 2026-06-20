@@ -35,9 +35,9 @@ checkout_duration_seconds = Histogram(
     "Checkout processing duration in seconds"
 )
 
-# ---------------------------------------------------------------------------
-# System-wide resource-manager metrics
-# ---------------------------------------------------------------------------
+
+
+
 
 system_running_requests = Gauge(
     "system_running_requests",

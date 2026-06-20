@@ -23,12 +23,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "store.middleware.profiler.SafeTimingMiddleware",
-
     "django.middleware.security.SecurityMiddleware",
     "ecommerce_backend.resource_middleware.ResourceManagerMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-
     "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
@@ -78,7 +76,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 APPEND_SLASH = False
-SYSTEM_MAX_WORKERS = 20
+SYSTEM_MAX_WORKERS = 40
 SYSTEM_MAX_QUEUE_SIZE = 100
 SYSTEM_TASK_TIMEOUT = 20
 MONITORED_SERVER_URLS = [

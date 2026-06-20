@@ -8,7 +8,7 @@ class DailySalesReport(models.Model):
         choices=[
             ("pending", "Pending"),
             ("processing", "Processing"),
-            ("finalizing", "Finalizing"),  # Transient mutex state — claimed by the winning chunk
+            ("finalizing", "Finalizing"),  
             ("completed", "Completed"),
             ("failed", "Failed"),
         ],

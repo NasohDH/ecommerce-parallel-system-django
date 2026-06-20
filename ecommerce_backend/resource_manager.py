@@ -1,8 +1,3 @@
-"""
-Resource Manager – Cached Thread Pool Controller
-=========================================================
-"""
-
 import time
 from threading import BoundedSemaphore, Lock
 from django.conf import settings
@@ -19,21 +14,20 @@ MAX_QUEUE_SIZE = getattr(settings, "SYSTEM_MAX_QUEUE_SIZE", 100)
 IDLE_TIMEOUT = 10
 
 class ResourceManager:
-    """Simulates a Cached Thread Pool with a hard limit."""
 
     def __init__(self) -> None:
         self._total_capacity = MAX_WORKERS + MAX_QUEUE_SIZE
         
-        # Outer gate – limits total admitted requests
+        
         self._admission = BoundedSemaphore(self._total_capacity)
         
-        # Inner gate – limits concurrently executing requests
+        
         self._workers = BoundedSemaphore(MAX_WORKERS)
 
         self._lock = Lock()
-        self._running = 0       # Currently busy
-        self._waiting = 0       # In queue
-        self._spawned = 1       # Currently "alive" threads
+        self._running = 0       
+        self._waiting = 0       
+        self._spawned = 1       
         self._rejected = 0
         self._last_active = time.time()
         
@@ -47,7 +41,7 @@ class ResourceManager:
         )
 
     def acquire(self) -> bool:
-        # 1. Admission Gate
+        
         admitted = self._admission.acquire(blocking=False)
         if not admitted:
             with self._lock:
@@ -59,14 +53,14 @@ class ResourceManager:
             self._waiting += 1
             self._sync_prometheus()
 
-        # 2. Worker Gate (Wait for a slot)
+        
         self._workers.acquire(blocking=True)
 
         with self._lock:
             self._waiting -= 1
             self._running += 1
             
-            # CACHED BEHAVIOR: Spawn a thread if we need one
+            
             if self._running > self._spawned:
                 self._spawned = self._running
                 
@@ -87,7 +81,7 @@ class ResourceManager:
 
     def get_metrics(self) -> dict:
         with self._lock:
-            # Lazy decay of idle threads to eliminate background Timer threads
+            
             now = time.time()
             if now - self._last_active >= IDLE_TIMEOUT:
                 if self._spawned > self._running:
